@@ -1,0 +1,33 @@
+#!/bin/sh
+
+#
+# post-update git hook to re-create the blog
+#
+
+#
+# Variables (Edit according to site)
+#
+
+CLONE="A directory where you cloned org-script"
+PUBLIC="The public html directory"
+GENERATE="The path to the orgsite script"
+ARGS="-l 1"
+
+#
+# Generate the blog!
+#
+
+# Update the repository
+export GIT_DIR=$CLONE/.git
+cd $CLONE
+git pull
+
+
+# Remove everything inside the PUBLIC dir
+rm -rf $PUBLIC/*
+
+# Execute the generation script
+python $GENERATE -i $CLONE -o $PUBLIC $ARGS
+
+echo -n "Last generated " > $CLONE/last_gen
+date >> $CLONE/last_gen
