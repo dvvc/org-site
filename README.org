@@ -1,0 +1,1 @@
+Org-site is a /very/ simple static site generator for Emacs' org-mode files that doesn't rely on Emacs for publishing.
