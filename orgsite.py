@@ -25,12 +25,11 @@ from jinja2.exceptions import TemplateNotFound
 from orgpython.parser import parser
 from orgpython.export.html import org_to_html
 
-ORG = 'org'
-TEMPLATES = 'templates'
-MEDIA = 'media'
+ORG_DIR = 'org'
+TEMPLATES_DIR = 'templates'
+MEDIA_DIR = 'media'
 
-INDEX_TEMPLATE = 'index.html'
-PAGE_TEMPLATE = 'page.html'
+DEFAULT_TEMPLATE = 'default.html'
 
 def usage():
 
@@ -66,25 +65,32 @@ def _filter(l, f):
             ffalse.append(el)
     return (ftrue, ffalse)
 
-def _find_template(templates, folder, template):
+def _find_template(templates, folder, page):
     """Finds an appropriate template for a type of page"""
-    
-    if folder == '':
-        subdirs = []
-    else:
+ 
+    if folder != '':
         subdirs = folder.split('/')
-
-    while len(subdirs) > 0:
-        # construct the prefix based on the current subdir
         template_prefix = '_'.join(subdirs) + '_'
-        try:
-            return templates.get_template(template_prefix + template)
-        except TemplateNotFound:
-            subdirs.pop()
+    else:
+        template_prefix = ''
 
-    # the template couldn't be found at any of the subdirs, use defaults
-    return templates.get_template(template)
+    template_name = page.replace('.org', '.html')
 
+    # First, try to find a template with the same name (s/.org/.html/) for the
+    # page in the same folder
+    try:
+        return templates.get_template(template_prefix + template_name)
+    except TemplateNotFound:
+        pass
+
+    # Else, try to use a default template on that folder
+    try:
+        return templates.get_template(template_prefix + DEFAULT_TEMPLATE)
+    except TemplateNotFound:
+        pass
+
+    # If everything failed, use the default template in the root
+    return templates.get_template(DEFAULT_TEMPLATE)
 
 
 def _write_file(dest_file, template, template_options):
@@ -141,12 +147,13 @@ def _generate_page(fname, org_tree, org_root, output_dir, template, gen_options)
 def _generate_pages(org_root, org_tree, output_dir, templates, files, folder, gen_options):
     """Generate the HTML of all files in a directory"""
 
-    # find the appropriate template for pages, based on the current folder
-    page_template = _find_template(templates, folder, PAGE_TEMPLATE)
-
     # Generate all pages in this directory
     pages = []
     for fname in files:
+
+        # find the appropriate template for pages, based on the current folder
+        page_template = _find_template(templates, folder, fname)
+
         page = _generate_page(fname, org_tree, org_root, output_dir, page_template, gen_options)
         pages.append(page)
 
@@ -161,6 +168,8 @@ def _make_tree(org_dir, org_tree, folder=''):
     document.
     Arguments:
       org_dir: the base path of the org files
+      org_tree: a dictionary where keys are filenames or subdir names, and
+        values are either org documents or other dictionaries
       folder: the currently traversed folder
     """
     input_dir = os.path.join(org_dir, folder)
@@ -170,7 +179,6 @@ def _make_tree(org_dir, org_tree, folder=''):
                                  os.path.isdir(os.path.join(input_dir, d)))
 
     for fname in files:
-        #p = _generate_page(input_dir, output_dir, page_template, fname, gen_options)
         org_path = os.path.join(input_dir, fname)        
 
         with open(org_path, 'r') as org_file:
@@ -215,9 +223,9 @@ def _traverse(org_root, org_tree, output_base, templates, gen_options, folder=''
 def generate(input_dir, output_dir, gen_options):
     """Generate the site in input_dir to output_dir"""
 
-    org = os.path.join(input_dir, ORG)
-    templates = os.path.join(input_dir, TEMPLATES)
-    media = os.path.join(input_dir, MEDIA)
+    org = os.path.join(input_dir, ORG_DIR)
+    templates = os.path.join(input_dir, TEMPLATES_DIR)
+    media = os.path.join(input_dir, MEDIA_DIR)
 
     # first, create the tree with all the subdirs and org documents
     org_tree = {}
@@ -230,7 +238,7 @@ def generate(input_dir, output_dir, gen_options):
     _traverse(org_tree, org_tree, output_dir, t_env, gen_options)
 
     # finally, copy the media folder to the output
-    media_out = os.path.join(output_dir, MEDIA)
+    media_out = os.path.join(output_dir, MEDIA_DIR)
     if os.path.exists(media_out):
         shutil.rmtree(media_out)
     shutil.copytree(media, media_out)
