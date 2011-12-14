@@ -8,12 +8,11 @@ Create a template for a page, add any media such as stylesheets and images,
 create some pages in org-mode and run the orgsite script to produce HTML
 code. Then upload the code to your web server.
 
-=orgsite.py -i /path/to/source -o /path/to/output -l 1=
+=orgsite.py -c config -i /path/to/source -o /path/to/output=
 
    - -c config :: The site configuration file
    - -i input :: The path of the site input files
    - -o output :: The path of the generated HTML
-   - -l offset :: The offset for headlines
 
 * Workflow
 

@@ -250,19 +250,15 @@ if __name__ == '__main__':
     input_dir = None 
     output_dir = None
     configuration = DEFAULT_CONFIG
-    level = 1
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'ho:l:i:c:')
+        opts, args = getopt.getopt(sys.argv[1:], 'ho:i:c:')
     except getopt.GetoptError, err:
         usage()
 
     for opt, arg in opts:
         if opt == '-h':
             usage()
-
-        elif opt == '-l':
-            level = int(arg)
 
         elif opt == '-i':
             input_dir = arg
