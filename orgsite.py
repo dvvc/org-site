@@ -18,6 +18,7 @@ import os
 import os.path
 import shutil
 import time
+import ConfigParser
 
 from jinja2 import Environment, FileSystemLoader
 from jinja2.exceptions import TemplateNotFound
@@ -25,31 +26,60 @@ from jinja2.exceptions import TemplateNotFound
 from orgpython.parser import parser
 from orgpython.export.html import org_to_html
 
-ORG_DIR = 'org'
-TEMPLATES_DIR = 'templates'
-MEDIA_DIR = 'media'
+DEFAULT_CONFIG = 'site.conf'
 
-DEFAULT_TEMPLATE = 'default.html'
+
+def _parse_config(path):
+    """Parse a configuration file and return a dictionary with the values"""
+
+    site_defaults = { \
+        'name': 'Default OrgSite',
+        'default_template': 'default.html',
+        'org': 'org',
+        'media': 'media',
+        'templates': 'templates',
+        'alias': 'anon',
+        'fullname': 'Anonymous',
+        'hl_offset': 1,
+        'remove_empty_p': True}
+
+    config = ConfigParser.RawConfigParser(site_defaults)
+    
+    if not config.read(path):
+        raise Exception("Could not find configuration file at %s" % path)
+
+    values = {}
+    for k in site_defaults:
+        values[k] = config.get('org-site', k)
+
+    # some casting
+    values['hl_offset'] = int(values['hl_offset'])
+    values['remove_empty_p'] = bool(values['remove_empty_p'])
+
+    return values
 
 def usage():
 
     print __doc__
     sys.exit(1)
 
+
+class Site:
+    """Information about the site"""
+    def __init__(self, config):
+        self.name = config['name']
+        self.author_alias = config['alias']
+        self.author_name = config['fullname']
+        self.pages = {}
+
+
 class Page:
     """A page is an org-mode text file"""
-    def __init__(self, title, fname, author, date, html):
+    def __init__(self, title, fname, date, html):
         self.title = title
         self.fname = fname
-        self.author = author
         self.date = date
         self.html = html
-
-class Index:
-    """An index is a virtual page that has information about other pages"""
-    def __init__(self, folder, pages):
-        self.folder = folder
-        self.pages = pages
 
 
 def _filter(l, f):
@@ -65,7 +95,7 @@ def _filter(l, f):
             ffalse.append(el)
     return (ftrue, ffalse)
 
-def _find_template(templates, folder, page):
+def _find_template(templates, folder, page, default):
     """Finds an appropriate template for a type of page"""
  
     if folder != '':
@@ -85,12 +115,12 @@ def _find_template(templates, folder, page):
 
     # Else, try to use a default template on that folder
     try:
-        return templates.get_template(template_prefix + DEFAULT_TEMPLATE)
+        return templates.get_template(template_prefix + default)
     except TemplateNotFound:
         pass
 
     # If everything failed, use the default template in the root
-    return templates.get_template(DEFAULT_TEMPLATE)
+    return templates.get_template(default)
 
 
 def _write_file(dest_file, template, template_options):
@@ -100,67 +130,32 @@ def _write_file(dest_file, template, template_options):
         f.write(template.render(**template_options).encode('utf8'))
 
 
-def _generate_index(output_dir, org_root, template, pages):
-
-    index = Index(os.path.basename(output_dir), pages)
-
-    index_path = os.path.join(output_dir, 'index.html')
-
-    template_options = {
-        'name': 'Itsahack!',
-        'index': index,
-        'root': org_root,
-        }
-
-    _write_file(index_path, template, template_options)
-
-    return index
-
-def _generate_page(fname, org_tree, org_root, output_dir, template, gen_options):
+def _generate_page(fname, org_tree, output_dir, template, config, site):
     """Generate the HTML for an org file and place it in the output"""
 
     html_file = os.path.splitext(fname)[0] + '.html'
 
     # generate the html for the org document
-    html = org_to_html(org_tree[fname], **gen_options).decode('utf8')
+    html = org_to_html(org_tree[fname], \
+                           hl_offset=config['hl_offset'], \
+                           remove_empty_p=config['remove_empty_p']).decode('utf8')
 
     # create a page object
-    # TODO: Use global options when these are not defined
     page = Page(org_tree[fname].options['TITLE'], \
                     html_file, \
-                    org_tree[fname].options['AUTHOR'], \
                     org_tree[fname].options['DATE'], \
                     html)
 
     dest_file = os.path.join(output_dir, html_file)
     
     template_options = {
-        'name': 'Itsahack!', 
         'page': page,
-        'root': org_root,
+        'site': site,
         }
 
     _write_file(dest_file, template, template_options)
 
     return page
-
-def _generate_pages(org_root, org_tree, output_dir, templates, files, folder, gen_options):
-    """Generate the HTML of all files in a directory"""
-
-    # Generate all pages in this directory
-    pages = []
-    for fname in files:
-
-        # find the appropriate template for pages, based on the current folder
-        page_template = _find_template(templates, folder, fname)
-
-        page = _generate_page(fname, org_tree, org_root, output_dir, page_template, gen_options)
-        pages.append(page)
-
-    # If there is not an index.org in the directory, use the template
-    if not 'index.org' in files:
-        index_template = _find_template(templates, folder, INDEX_TEMPLATE)
-        _generate_index(output_dir, org_root, index_template, pages)
 
 
 def _make_tree(org_dir, org_tree, folder=''):
@@ -192,7 +187,7 @@ def _make_tree(org_dir, org_tree, folder=''):
         _make_tree(org_dir, org_tree[subdir], newfolder)
 
 
-def _traverse(org_root, org_tree, output_base, templates, gen_options, folder=''):
+def _traverse(org_root, org_tree, output_base, templates, config, site, folder=''):
     """
     Arguments:
       org_root: a reference to the whole org document tree
@@ -210,22 +205,26 @@ def _traverse(org_root, org_tree, output_base, templates, gen_options, folder=''
                                  os.path.splitext(k)[1] == '.org')
 
     # generate the HTML for each org document in the current subdir
-    _generate_pages(org_root, org_tree, output_dir, templates, files, folder, gen_options)
+    for fname in files:
+
+        # find the appropriate template for pages, based on the current folder
+        page_template = _find_template(templates, folder, fname, config['default_template'])
+        _generate_page(fname, org_tree, output_dir, page_template, config, site)
 
     # create each of the subdirs it in the output directory, then continue
     for subdir in subdirs:
 
         os.mkdir(os.path.join(output_dir, subdir))
         newfolder = os.path.join(folder, subdir)
-        _traverse(org_root, org_tree[subdir], output_dir, templates, gen_options, newfolder)
+        _traverse(org_root, org_tree[subdir], output_dir, templates, config, site, newfolder)
 
 
-def generate(input_dir, output_dir, gen_options):
+def generate(input_dir, output_dir, config):
     """Generate the site in input_dir to output_dir"""
 
-    org = os.path.join(input_dir, ORG_DIR)
-    templates = os.path.join(input_dir, TEMPLATES_DIR)
-    media = os.path.join(input_dir, MEDIA_DIR)
+    org = os.path.join(input_dir, config['org'])
+    templates = os.path.join(input_dir, config['templates'])
+    media = os.path.join(input_dir, config['media'])
 
     # first, create the tree with all the subdirs and org documents
     org_tree = {}
@@ -234,11 +233,14 @@ def generate(input_dir, output_dir, gen_options):
     # create the template environment for jinja2
     t_env = Environment(loader= FileSystemLoader(templates, encoding='utf-8'))
 
+    # create the site object with the global information
+    site = Site(config)
+
     # traverse the tree and generate the corresponding HTML
-    _traverse(org_tree, org_tree, output_dir, t_env, gen_options)
+    _traverse(org_tree, org_tree, output_dir, t_env, config, site)
 
     # finally, copy the media folder to the output
-    media_out = os.path.join(output_dir, MEDIA_DIR)
+    media_out = os.path.join(output_dir, config['media'])
     if os.path.exists(media_out):
         shutil.rmtree(media_out)
     shutil.copytree(media, media_out)
@@ -247,10 +249,11 @@ if __name__ == '__main__':
 
     input_dir = None 
     output_dir = None
+    configuration = DEFAULT_CONFIG
     level = 1
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'ho:l:i:')
+        opts, args = getopt.getopt(sys.argv[1:], 'ho:l:i:c:')
     except getopt.GetoptError, err:
         usage()
 
@@ -267,13 +270,17 @@ if __name__ == '__main__':
         elif opt == '-o':
             output_dir = arg
 
+        elif opt == '-c':
+            configuration = arg
+
     if not output_dir or not input_dir:
         print 'Must provide input and output dir!'
         sys.exit(1)
 
-    gen_options = {
-        'remove_empty_p': True,
-        'hl_offset': level,
-        }
+    try:
+        config = _parse_config(configuration)
+    except Exception as e:
+        print "Configuration error: %s" % e
+        sys.exit(1)
 
-    generate(input_dir, output_dir, gen_options)
+    generate(input_dir, output_dir, config)

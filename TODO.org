@@ -1,5 +1,5 @@
 #+TODO: TODO CURRENT | DONE CANCELLED
 
-* TODO Add a configuration file
+* DONE Add a configuration file
 
   Can hold site and configuration values (author, site name, header offset...)

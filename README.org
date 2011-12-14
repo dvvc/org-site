@@ -10,6 +10,7 @@ code. Then upload the code to your web server.
 
 =orgsite.py -i /path/to/source -o /path/to/output -l 1=
 
+   - -c config :: The site configuration file
    - -i input :: The path of the site input files
    - -o output :: The path of the generated HTML
    - -l offset :: The offset for headlines
@@ -53,13 +54,14 @@ There are a number of pre-defined variables that can be used from templates:
             for a page object are:
 	
 			+ title: The title of the page, from the #+TITLE property
-			+ author: The value of #+AUTHOR
+			+ fname: The page filename
 			+ date: The value of #+DATE
 			+ html: The generated HTML code for the page
 
   - site :: It has a reference to all the pages in the site. Attributes:
-	     + author: The site author
 	     + name: The site name
+	     + author_alias: The author alias
+	     + author_name: The author full name
 	     + pages: Access to all pages / folders (e.g. site.pages.posts.post1)
 
 
