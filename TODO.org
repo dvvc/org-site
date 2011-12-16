@@ -3,3 +3,9 @@
 * DONE Add a configuration file
 
   Can hold site and configuration values (author, site name, header offset...)
+
+* TODO Add support for plugins
+
+  - Run on parse time
+  - Run dynamically
+  - Run as a cron job
