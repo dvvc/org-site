@@ -8,7 +8,7 @@
 # Variables (Edit according to site)
 #
 
-CLONE="A directory where you cloned org-script"
+CLONE="A directory where you cloned org-site"
 PUBLIC="The public html directory"
 GENERATE="The path to the orgsite script"
 ARGS="-l 1"

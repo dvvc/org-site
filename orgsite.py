@@ -14,10 +14,12 @@ Generate a blog, from a set of templates and org files. Usage:
 
 import getopt
 import sys
+import re
 import os
 import os.path
 import shutil
 import time
+import datetime
 import ConfigParser
 
 from jinja2 import Environment, FileSystemLoader
@@ -28,6 +30,7 @@ from orgpython.export.html import org_to_html
 
 DEFAULT_CONFIG = 'site.conf'
 
+DATETIME_RE = r'<(\d{4})-(\d{2})-(\d{2}) [a-zA-Z]{3} (\d{2}):(\d{2})>'
 
 def _parse_config(path):
     """Parse a configuration file and return a dictionary with the values"""
@@ -78,9 +81,18 @@ class Page:
     def __init__(self, title, fname, date, html):
         self.title = title
         self.fname = fname
-        self.date = date
         self.html = html
 
+        # Try to parse the date
+        m = re.match(DATETIME_RE, date)
+        if m:
+            self.date = datetime.datetime(int(m.group(1)),
+                                          int(m.group(2)),
+                                          int(m.group(3)),
+                                          int(m.group(4)),
+                                          int(m.group(5)))
+        else:
+            self.date = date
 
 def _filter(l, f):
     """Filters a list using function f, returns two lists, the first with the
