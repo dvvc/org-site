@@ -22,6 +22,8 @@ import time
 import datetime
 import ConfigParser
 
+import filters
+
 from jinja2 import Environment, FileSystemLoader
 from jinja2.exceptions import TemplateNotFound
 
@@ -42,6 +44,7 @@ def _parse_config(path):
         'org': 'org',
         'media': 'media',
         'templates': 'templates',
+        'dateformat': '%d %b %Y at %H:%M',
         'alias': 'anon',
         'fullname': 'Anonymous',
         'hl_offset': 1,
@@ -289,8 +292,9 @@ def generate(input_dir, output_dir, config):
     site = Site(config)
     _make_site(org, site, site.pages)
 
-    # create the template environment for jinja2
+    # create the template environment for jinja2 and register custom filters
     t_env = Environment(loader= FileSystemLoader(templates, encoding='utf-8'))
+    filters.register_filters(t_env, site)
 
     # traverse the site and generate the corresponding HTML
     _write_site(site, output_dir, t_env, site.pages)

@@ -1,18 +1,26 @@
 #+TODO: TODO CURRENT | DONE CANCELLED
 
+* TODO Add support for plugins [0/3]
+
+  - [ ] Run during parse time
+  - [ ] Run dynamically
+  - [ ] Run as a cron job
+
+* TODO Rewrite recursive functions iteratively
+
+* TODO Add support for tags
+
+-----
+
+* DONE Add Jinja2 filter for datetime formatting
+
+* DONE Add an attribute to Page for its URL
+  - [X] Add site root as a configurable option, use it for page urls
+
 * DONE Add a configuration file
 
   Can hold site and configuration values (author, site name, header offset...)
-  
-* TODO Add support for plugins
 
-  - Run on parse time
-  - Run dynamically
-  - Run as a cron job
 
-* TODO Add an attribute to Page for its URL
-  - [ ] Add site root as a configurable option, use it for page urls
-
-* TODO Add Jinja2 filter for datetime formatting
 
 

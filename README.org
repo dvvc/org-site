@@ -1,6 +1,12 @@
 Org-site is a /very/ simple static site generator for [[http://www.gnu.org/s/emacs][Emacs]] org-mode files that
 doesn't rely on Emacs for publishing.
 
+At this moment, the org-site engine supports offline generation of content and
+[[http://git-scm.com][git]] integration. For the first case, you run the generate script in your local
+machine and then upload the generated code. If you use git, you can keep your
+code in a repository and execute the generate script remotely via a post-update
+hook.
+
 
 * Usage
 
@@ -14,13 +20,29 @@ code. Then upload the code to your web server.
    - -i input :: The path of the site input files
    - -o output :: The path of the generated HTML
 
-* Workflow
+* Configuration file
 
-At this moment, the org-site engine supports offline generation of content and
-[[http://git-scm.com][git]] integration. For the first case, you run the generate script in your local
-machine and then upload the generated code. If you use git, you can keep your
-code in a repository and execute the generate script remotely via a post-update
-hook.
+The site configuration file is required when generating pages. All options have
+sensible defaults, but it is highly recommended that the main ones (site root,
+name, author...) are defined. The configuration file is a traditional python
+text file as understood by the [[http://docs.python.org/library/configparser.html][ConfigParser]] library. The root (and only) section
+must be called =[org-site]=, and it supports the following options:
+
+  - root :: The site's root URL (/default: //)
+  - name :: The site's name
+  - default_template :: The name of the template file to use by default
+       (/default: default.html/)
+  - org :: The name of the directory containing the org files (/default: org/)
+  - media :: Name of media directory (/default: media/)
+  - templates :: Name of templates directory (/default: templates/)
+  - dateformat :: The format used to represent dates with =datetime= filter
+                  (/default: "%d %b %Y at %H:%M"/)
+  - fullname :: Site author's full name (/default: Anonymous/)
+  - alias :: Site author's alias (/defaul: anon/)
+  - hl_offset :: Heading offset used by org-python parser (/default: 1/)
+  - remove_empty_p :: Whether org-python should remove empty paragraphs
+                      (/default: True/)
+
 
 
 * Input structure
@@ -30,8 +52,8 @@ $ROOT/
   - templates/
   - media/
 
-The =org= directory contains all input files. Org-site currently supports one
-sublevel inside this folder. The =templates= dir has Jinja2 templates to control the
+The =org= directory contains all input files, which can be in
+subdirectories. The =templates= dir has Jinja2 templates to control the
 appearance of the rendered html. Finally, the =media= folder contains static
 images, stylesheets that are copied as-is to the output destination.
     
@@ -45,7 +67,7 @@ subfolder, then the script will try to use the template called
 foldername_pagename.html. If it cannot find a suitable template file for a page,
 it will default to page.html.
 
-*** Variables
+** Variables
 
 There are a number of pre-defined variables that can be used from templates:
 
@@ -54,15 +76,33 @@ There are a number of pre-defined variables that can be used from templates:
 	
 			+ title: The title of the page, from the #+TITLE property
 			+ fname: The page filename
-			+ date: The value of #+DATE
+			+ date: The value of #+DATE, converted to a datetime
 			+ html: The generated HTML code for the page
+			+ url: The page's full URL
 
   - site :: It has a reference to all the pages in the site. Attributes:
 	     + name: The site name
 	     + author_alias: The author alias
 	     + author_name: The author full name
-	     + pages: Access to all pages / folders (e.g. site.pages.posts.post1)
+	     + pages: Access to all pages / folders (e.g. site.pages.posts)
 
 
 
+** Page traversal
 
+The =site= variable has access to all generated pages and subdirectories though
+=site.pages=. This attribute behaves differently to traverse pages or folders:
+
+  - If attributes of =site.pages= are accessed, they will return a reference to
+    a subdir with the same name, if it exists. (e.g. =site.pages.posts= will
+    return a reference to the =/org/posts= directory.
+
+  - If the contents of =site.pages= or any subdirectory are iterated over, a
+    list of pages in the iterated directory will be returned. (e.g.
+    =[post.title for post in site.pages.posts]= will return a list of page titles
+    in the =/org/posts= directory.
+
+** Custom filters
+
+New custom Jinja2 filters can be defined in =filters.py= by adding them to the
+Jinja2 environment in =register_filters=
