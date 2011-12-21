@@ -36,6 +36,7 @@ def _parse_config(path):
     """Parse a configuration file and return a dictionary with the values"""
 
     site_defaults = { \
+        'root': '/',
         'name': 'Default OrgSite',
         'default_template': 'default.html',
         'org': 'org',
@@ -67,21 +68,49 @@ def usage():
     sys.exit(1)
 
 
+
+class SubDir:
+    """A site subdirectory, containing pages or other SubDirs"""
+    def __init__(self, name):
+        self.name = name
+        self.subdirs = {}
+        self.pages = []
+
+    def add_subdir(self, name):
+        subdir = SubDir(name)
+        self.subdirs[name] = subdir
+        return subdir
+
+    def add_page(self, page):
+        self.pages.append(page)
+        
+    def __getattr__(self, name):
+        if self.subdirs.has_key(name):
+            return self.subdirs[name]
+        else:
+            raise AttributeError
+
+    def __iter__(self):
+        return self.pages.__iter__()
+
 class Site:
     """Information about the site"""
     def __init__(self, config):
+        self.config = config
         self.name = config['name']
         self.author_alias = config['alias']
         self.author_name = config['fullname']
-        self.pages = {}
+        self.root = config['root']
+        self.pages = SubDir('')
 
 
 class Page:
     """A page is an org-mode text file"""
-    def __init__(self, title, fname, date, html):
+    def __init__(self, title, fname, date, html, url):
         self.title = title
         self.fname = fname
         self.html = html
+        self.url = url
 
         # Try to parse the date
         m = re.match(DATETIME_RE, date)
@@ -107,7 +136,7 @@ def _filter(l, f):
             ffalse.append(el)
     return (ftrue, ffalse)
 
-def _find_template(templates, folder, page, default):
+def _find_template(templates, folder, page_name, default):
     """Finds an appropriate template for a type of page"""
  
     if folder != '':
@@ -116,7 +145,7 @@ def _find_template(templates, folder, page, default):
     else:
         template_prefix = ''
 
-    template_name = page.replace('.org', '.html')
+    template_name = page_name.replace('.org', '.html')
 
     # First, try to find a template with the same name (s/.org/.html/) for the
     # page in the same folder
@@ -135,48 +164,54 @@ def _find_template(templates, folder, page, default):
     return templates.get_template(default)
 
 
-def _write_file(dest_file, template, template_options):
+def _write_file(page, site, dest_file, template):
     """Render the given template to destination file"""
-    
-    with open(dest_file, 'w') as f:
-        f.write(template.render(**template_options).encode('utf8'))
 
-
-def _generate_page(fname, org_tree, output_dir, template, config, site):
-    """Generate the HTML for an org file and place it in the output"""
-
-    html_file = os.path.splitext(fname)[0] + '.html'
-
-    # generate the html for the org document
-    html = org_to_html(org_tree[fname], \
-                           hl_offset=config['hl_offset'], \
-                           remove_empty_p=config['remove_empty_p']).decode('utf8')
-
-    # create a page object
-    page = Page(org_tree[fname].options['TITLE'], \
-                    html_file, \
-                    org_tree[fname].options['DATE'], \
-                    html)
-
-    dest_file = os.path.join(output_dir, html_file)
-    
     template_options = {
         'page': page,
         'site': site,
         }
 
-    _write_file(dest_file, template, template_options)
+    with open(dest_file, 'w') as f:
+        f.write(template.render(**template_options).encode('utf8'))
+
+
+def _generate_page(fname, org_doc, site):
+    """Generate the HTML for an org file and place it in the output"""
+
+    html_file = os.path.splitext(fname)[0] + '.html'
+
+    # generate the html for the org document
+    html = org_to_html(org_doc, \
+                           hl_offset = site.config['hl_offset'], \
+                           remove_empty_p = site.config['remove_empty_p'])
+
+    html = html.decode('utf8')
+
+    # create a page object
+    page = Page(org_doc.options['TITLE'], \
+                    html_file, \
+                    org_doc.options['DATE'], \
+                    html, \
+                    '')
+
+    #dest_file = os.path.join(output_dir, html_file)
+    
+    # template_options = {
+    #     'page': page,
+    #     'site': site,
+    #     }
+
+    #_write_file(dest_file, template, template_options)
 
     return page
 
 
-def _make_tree(org_dir, org_tree, folder=''):
-    """Traverse the directory tree, for each file in a tree node generate an org
-    document.
+def _make_site(org_dir, site, subdir, folder=''):
+    """Traverse the directory tree, for each org file generate a page object.
     Arguments:
       org_dir: the base path of the org files
-      org_tree: a dictionary where keys are filenames or subdir names, and
-        values are either org documents or other dictionaries
+      subdir: the current subdirectory in the site structure
       folder: the currently traversed folder
     """
     input_dir = os.path.join(org_dir, folder)
@@ -191,15 +226,18 @@ def _make_tree(org_dir, org_tree, folder=''):
         with open(org_path, 'r') as org_file:
             org_doc = parser.parse(org_file)
 
-        org_tree[fname] = org_doc
-
-    for subdir in subdirs:
-        newfolder = os.path.join(folder, subdir)
-        org_tree[subdir] = {}
-        _make_tree(org_dir, org_tree[subdir], newfolder)
+        page = _generate_page(fname, org_doc, site)
+        subdir.add_page(page)
 
 
-def _traverse(org_root, org_tree, output_base, templates, config, site, folder=''):
+    for subdir_name in subdirs:
+        newfolder = os.path.join(folder, subdir_name)
+        newsubdir = subdir.add_subdir(subdir_name)
+        _make_site(org_dir, site, newsubdir, newfolder)
+
+
+def _traverse(site, output_base, templates, subdir, folder=''):
+#org_root, org_tree, output_base, templates, config, site, subdir, folder=''):
     """
     Arguments:
       org_root: a reference to the whole org document tree
@@ -212,23 +250,37 @@ def _traverse(org_root, org_tree, output_base, templates, config, site, folder='
     output_dir = os.path.join(output_base, folder)
 
     # traverse the tree 
-    files, subdirs = _filter(org_tree.keys(), \
-                                 lambda k: \
-                                 os.path.splitext(k)[1] == '.org')
+    pages = subdir.pages
+    subdirs = subdir.subdirs.keys()
+# , subdirs = _filter(org_tree.keys(), \
+#                                  lambda k: \
+#                                  os.path.splitext(k)[1] == '.org')
 
-    # generate the HTML for each org document in the current subdir
-    for fname in files:
+    
+    # # generate the HTML for each org document in the current subdir
+    # for fname in files:
 
-        # find the appropriate template for pages, based on the current folder
-        page_template = _find_template(templates, folder, fname, config['default_template'])
-        _generate_page(fname, org_tree, output_dir, page_template, config, site)
+    #     # find the appropriate template for pages, based on the current folder
+    #     page_template = _find_template(templates, folder, fname, config['default_template'])
+    #     page = _generate_page(fname, org_tree, output_dir, page_template, config, site)
+    #     subdir.add_page(page)
+
+    # write pages in current subdir to output directory
+    for page in pages:
+        page_template = _find_template(templates, folder, page.fname, \
+                                           site.config['default_template'])
+
+        dest_file = os.path.join(output_dir, page.fname)
+        _write_file(page, site, dest_file, page_template)
+
 
     # create each of the subdirs it in the output directory, then continue
-    for subdir in subdirs:
+    for subdir_name in subdirs:
 
-        os.mkdir(os.path.join(output_dir, subdir))
-        newfolder = os.path.join(folder, subdir)
-        _traverse(org_root, org_tree[subdir], output_dir, templates, config, site, newfolder)
+        os.mkdir(os.path.join(output_dir, subdir_name))
+        newfolder = os.path.join(folder, subdir_name)
+        #newsubdir = subdir.add_subdir(subdir_name)
+        _traverse(site, output_base, templates, subdir.subdirs[subdir_name], newfolder)
 
 
 def generate(input_dir, output_dir, config):
@@ -238,18 +290,16 @@ def generate(input_dir, output_dir, config):
     templates = os.path.join(input_dir, config['templates'])
     media = os.path.join(input_dir, config['media'])
 
-    # first, create the tree with all the subdirs and org documents
-    org_tree = {}
-    _make_tree(org, org_tree)
+    # create the site object with the global information and parse the org files
+    # into pages and subdirs
+    site = Site(config)
+    _make_site(org, site, site.pages)
 
     # create the template environment for jinja2
     t_env = Environment(loader= FileSystemLoader(templates, encoding='utf-8'))
 
-    # create the site object with the global information
-    site = Site(config)
-
-    # traverse the tree and generate the corresponding HTML
-    _traverse(org_tree, org_tree, output_dir, t_env, config, site)
+    # traverse the site and generate the corresponding HTML
+    _traverse(site, output_dir, t_env, site.pages)
 
     # finally, copy the media folder to the output
     media_out = os.path.join(output_dir, config['media'])
