@@ -1,15 +1,16 @@
-#!/usr/bin/python26
+#!/usr/bin/python
 
 """
 Generate a blog, from a set of templates and org files. Usage:
 
-  generate.py [options]
+  orgsite.py [options]
 
   Options:
 
-   - i input :: The directory where the input files are located
-   - o output :: The directory where the page will be generated
-   - l offset :: The headline offset (e.g. * -> H(1 + offset)
+   - c conf   :: The site.conf file. If not specified it will try to find one
+                 under the input directory
+   - i input  :: The directory where the input files are located
+   - o output :: The directory where the html code will be generated
 """
 
 import getopt
@@ -32,7 +33,7 @@ from orgpython.export.html import org_to_html
 
 DEFAULT_CONFIG = 'site.conf'
 
-DATETIME_RE = r'<(\d{4})-(\d{2})-(\d{2}) [a-zA-Z]{3} (\d{2}):(\d{2})>'
+DATETIME_RE = r'<(\d{4})-(\d{2})-(\d{2}) [a-zA-Z]{3}\s?(\d{2}:\d{2})?>'
 
 def _parse_config(path):
     """Parse a configuration file and return a dictionary with the values"""
@@ -51,7 +52,7 @@ def _parse_config(path):
         'remove_empty_p': True}
 
     config = ConfigParser.RawConfigParser(site_defaults)
-    
+
     if not config.read(path):
         raise Exception("Could not find configuration file at %s" % path)
 
@@ -92,7 +93,7 @@ class SubDir:
 
     def add_page(self, page):
         self.pages.append(page)
-        
+
     def __getattr__(self, name):
         if self.subdirs.has_key(name):
             return self.subdirs[name]
@@ -120,17 +121,24 @@ class Page:
         self.fname = fname
         self.html = html
         self.url = url
+        self.date = self._parse_date(date)
 
+    def _parse_date(self, date):
         # Try to parse the date
         m = re.match(DATETIME_RE, date)
+        time = [0, 0]
+        date = None
         if m:
-            self.date = datetime.datetime(int(m.group(1)),
-                                          int(m.group(2)),
-                                          int(m.group(3)),
-                                          int(m.group(4)),
-                                          int(m.group(5)))
-        else:
-            self.date = date
+            # The date may or may not have the time
+            if m.group(4):
+                time = m.group(4).split(':')
+
+            date = datetime.datetime(int(m.group(1)),
+                                     int(m.group(2)),
+                                     int(m.group(3)),
+                                     int(time[0]),
+                                     int(time[1]))
+        return date
 
 
     # Hack to make the jinja2 builtin sort(attribute='date') work with pages
@@ -153,7 +161,7 @@ def _filter(l, f):
 
 def _find_template(templates, folder, page_name, default):
     """Finds an appropriate template for a type of page"""
- 
+
     if folder != '':
         subdirs = folder.split('/')
         template_prefix = '_'.join(subdirs) + '_'
@@ -233,7 +241,7 @@ def _make_site(org_dir, site, subdir, folder=''):
                                  os.path.isdir(os.path.join(input_dir, d)))
 
     for fname in files:
-        org_path = os.path.join(input_dir, fname)        
+        org_path = os.path.join(input_dir, fname)
 
         with open(org_path, 'r') as org_file:
             org_doc = parser.parse(org_file)
@@ -259,7 +267,7 @@ def _write_site(site, output_base, templates, subdir, folder=''):
     """
     output_dir = os.path.join(output_base, folder)
 
-    # traverse the tree 
+    # traverse the tree
     pages = subdir.pages
     subdirs = subdir.subdirs.keys()
 
@@ -304,10 +312,10 @@ def generate(input_dir, output_dir, config):
     if os.path.exists(media_out):
         shutil.rmtree(media_out)
     shutil.copytree(media, media_out)
-    
+
 if __name__ == '__main__':
 
-    input_dir = None 
+    input_dir = None
     output_dir = None
     configuration = DEFAULT_CONFIG
 
